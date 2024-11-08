@@ -262,6 +262,29 @@ impl MemorySet {
             false
         }
     }
+
+    /// check if the area overlap with the range
+    pub fn area_overlap(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        for area in self.areas.iter() {
+            if area.vpn_range.overlap(&VPNRange::new(start.floor(), end.ceil())) {
+                return true;
+            }
+        }
+        false
+
+    }
+
+    /// unmap a exist area
+    pub fn unmmap_area(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        if let Some(index) = self.areas
+                                        .iter()
+                                        .position(|area| area.vpn_range.get_start() == start.floor() && area.vpn_range.get_end() == end.ceil()) {
+            let mut area = self.areas.remove(index);
+            area.unmap(&mut self.page_table);
+            return true;
+        }
+        false
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

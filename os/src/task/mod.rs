@@ -18,6 +18,7 @@ use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use crate::mm::{VirtAddr, MapPermission};
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
@@ -157,7 +158,7 @@ impl TaskManager {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_trap_cx()
     }
-
+    
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
@@ -191,6 +192,27 @@ impl TaskManager {
             panic!("All applications completed!");
         }   
     }
+
+    /// Get the current 'Running' task's memory set.
+    fn get_current_memset(&self) -> &'static crate::mm::MemorySet {
+        let inner = self.inner.exclusive_access();
+        let mem_set = &inner.tasks[inner.current_task].memory_set;
+        unsafe { &*(mem_set as *const _ as *const crate::mm::MemorySet) }
+    }
+
+    /// Map a new area in the current task's memory set.
+    fn add_new_area_current(&self, start: VirtAddr, end: VirtAddr, permission: MapPermission) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.insert_framed_area(start, end, permission);
+    }
+
+    fn unmmap_area_current(&self, start: VirtAddr, end: VirtAddr) -> bool{
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.unmmap_area(start, end)
+    }
+
 }
 
 /// Run the first task in task list.
@@ -259,4 +281,19 @@ pub fn inc_current_syscall_times(syscall_nums: usize) {
 /// Get the number of syscall times of the current task.
 pub fn get_current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
     TASK_MANAGER.get_current_syscall_times()
+}
+
+/// Get the current 'Running' task's memory set.
+pub fn get_current_memset() -> &'static crate::mm::MemorySet {
+    TASK_MANAGER.get_current_memset()
+}
+
+/// Map a new area in the current task's memory set.
+pub fn add_new_area_current(start: VirtAddr, end: VirtAddr, permission: MapPermission) {
+    TASK_MANAGER.add_new_area_current(start, end, permission);
+}
+
+/// Unmap an area in the current task's memory set.
+pub fn unmmap_area_current(start: VirtAddr, end: VirtAddr) -> bool{
+    TASK_MANAGER.unmmap_area_current(start, end)
 }
